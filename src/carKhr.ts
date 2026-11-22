@@ -16,7 +16,8 @@ export const PANEL_DRIVE: DoorDrive = Object.freeze({ stiffness: 60, damping: 12
 
 export interface CarNode {
   name: string;
-  parent: "root" | "Chassis";
+  /** "root", "Chassis", or the hinged part that carries this panel collider. */
+  parent: string;
   /** Node origin in its parent frame: the hinge for articulated parts, the box centre otherwise. */
   position: Vec3;
   /** Box collider size, centred `colliderOffset` from the node origin. */
@@ -72,11 +73,13 @@ export function planCar(recipe: CarRecipe, friction = 0.6): CarPlan {
     const h = p.hinge!;
     const local = sub(p.center, h.anchor);
     const own = sumMass([{ massKg: p.massKg, center: local, size: p.size }]);
-    nodes.push({ name: p.name, parent: "Chassis", position: h.anchor, size: p.size, colliderOffset: local });
+    // Hinge node at the anchor (joint + mass); a child panel node carries the offset box collider.
+    nodes.push({ name: p.name, parent: "Chassis", position: h.anchor, size: [0, 0, 0], colliderOffset: [0, 0, 0] });
+    nodes.push({ name: `${p.name}_Panel`, parent: p.name, position: local, size: p.size, colliderOffset: [0, 0, 0] });
+    specs.push({ nodeName: `${p.name}_Panel`, collider: { shape: { type: "box", size: p.size }, friction } });
     specs.push({
       nodeName: p.name,
       motion: { isKinematic: false, mass: p.massKg, centerOfMass: own.centerOfMass, inertiaDiagonal: own.inertiaDiagonal },
-      collider: { shape: { type: "box", size: p.size }, friction },
       joint: {
         connectedNodeName: "Chassis",
         kind: "revolute",

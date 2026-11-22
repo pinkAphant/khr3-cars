@@ -40,10 +40,20 @@
     "build": "rm -rf dist && tsc && rm -f dist/*.test.*",
     "test": "rm -rf dist && tsc && node --test dist/*.test.js && rm -f dist/*.test.*",
     "prepack": "npm run build",
-    "pack:dry": "npm pack --dry-run"
+    "pack:dry": "npm pack --dry-run",
+    "test:glb": "node --import ./test-loader.mjs --import tsx --test test/*.test.ts"
   },
   "devDependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@khr3/core": "^0.1.0",
+    "@react-three/fiber": "^9.8.2",
+    "@react-three/rapier": "^2.2.0",
     "@types/node": "^22.0.0",
+    "@types/three": "^0.184.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.184.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.8.0"
   },
   "private": true
