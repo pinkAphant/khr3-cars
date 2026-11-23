@@ -1,3 +1,4 @@
+import { computed, effect } from "@preact/signals-core";
 import { Container, Fullscreen, Text } from "@react-three/uikit";
 import { useEffect, useState } from "react";
 import type * as THREE from "three";
@@ -42,6 +43,23 @@ const C_CYAN = "#00E5FF";
 const C_RED = "#FF3B30";
 const C_PAPER = "#E6EDF3";
 
+/** Direct @preact/signals-core computed text signals passed straight into @react-three/uikit <Text> (0 React renders at 60Hz). */
+const calibrationTextSignal = computed(() => {
+  const cal = calibrationSignal.value;
+  return `WB=${cal.wheelbase.toFixed(2)}M  R=${cal.wheelRadii[0].toFixed(2)}M  MIN_Y=${cal.minWheelY.toFixed(4)}M  AABB=[${cal.aabbSize.join("x")}]M`;
+});
+
+const telemetryTextSignal = computed(() => {
+  const mass = telemetryMassKgSignal.value.toFixed(0);
+  const com = telemetryComSignal.value.map((v) => v.toFixed(2)).join(",");
+  const split = telemetryFrontSplitSignal.value;
+  const fPct = (split * 100).toFixed(0);
+  const rPct = ((1 - split) * 100).toFixed(0);
+  const [kf, kr] = telemetryCornerKSignal.value;
+  const spd = telemetrySpeedKmhSignal.value.toFixed(0);
+  return `MASS=${mass}KG  COM=[${com}]  F/R=${fPct}/${rPct}  K=[${kf.toFixed(0)},${kr.toFixed(0)}]  ${spd} KM/H`;
+});
+
 interface CadButtonProps {
   readonly label: string;
   readonly active?: boolean;
@@ -78,11 +96,21 @@ export interface GateHudUikitProps {
 }
 
 export function GateHudUikit({ assembly, rootObjRef, onWrapProxy }: GateHudUikitProps) {
-  const [, setTick] = useState(0);
+  const [, setUiRevision] = useState(0);
 
+  // Re-render React tree ONLY when discrete UI mode buttons change, never on 60Hz physics telemetry!
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => (t + 1) & 0xffff), 120);
-    return () => clearInterval(id);
+    return effect(() => {
+      void gateStepSignal.value;
+      void activePresetSignal.value;
+      void shadingModeSignal.value;
+      void eraModeSignal.value;
+      void freqBucketSignal.value;
+      void dampBucketSignal.value;
+      void wrenchModeSignal.value;
+      void gate1UnlockedComputed.value;
+      setUiRevision((r) => (r + 1) & 0xffff);
+    });
   }, []);
 
   const step = gateStepSignal.value;
@@ -92,7 +120,6 @@ export function GateHudUikit({ assembly, rootObjRef, onWrapProxy }: GateHudUikit
   const freq = freqBucketSignal.value;
   const damp = dampBucketSignal.value;
   const wrench = wrenchModeSignal.value;
-  const cal = calibrationSignal.value;
   const unlocked = gate1UnlockedComputed.value;
 
   const handleDownloadGlb = async () => {
@@ -108,7 +135,6 @@ export function GateHudUikit({ assembly, rootObjRef, onWrapProxy }: GateHudUikit
 
   return (
     <Fullscreen flexDirection="column" justifyContent="space-between" padding={12} pointerEvents="none">
-      {/* Top Bar: Step Switcher + Presets + Era & Shading */}
       <Container
         flexDirection="row"
         justifyContent="space-between"
@@ -153,26 +179,17 @@ export function GateHudUikit({ assembly, rootObjRef, onWrapProxy }: GateHudUikit
               shadingModeSignal.value = shading === "psx-flat" ? "dc-smooth" : "psx-flat";
             }}
           />
-          <CadButton
-            label="[ STEP 1: CALIBRATION BAY ]"
-            active={step === 1}
-            onClick={() => {
-              gateStepSignal.value = 1;
-            }}
-          />
+          <CadButton label="[ STEP 1: CALIBRATION BAY ]" active={step === 1} onClick={() => { gateStepSignal.value = 1; }} />
           <CadButton
             label="[ -> STEP 2: LIVE DROP & BREAKAWAY PAD ]"
             active={step === 2}
             disabled={!unlocked}
             accent={unlocked ? C_AMBER : C_RED}
-            onClick={() => {
-              gateStepSignal.value = 2;
-            }}
+            onClick={() => { gateStepSignal.value = 2; }}
           />
         </Container>
       </Container>
 
-      {/* Bottom Bar: Step-specific controls + Live Telemetry */}
       <Container
         flexDirection="row"
         justifyContent="space-between"
@@ -194,25 +211,17 @@ export function GateHudUikit({ assembly, rootObjRef, onWrapProxy }: GateHudUikit
               onClick={() => onWrapProxy(wrapSingleMeshWithPaperShellProxy(rootObjRef.current, preset, shading))}
             />
             <Text fontSize={10} color={unlocked ? C_CYAN : C_RED}>
-              {`WB=${cal.wheelbase.toFixed(2)}M  R=${cal.wheelRadii[0].toFixed(2)}M  MIN_Y=${cal.minWheelY.toFixed(4)}M  AABB=[${cal.aabbSize.join("x")}]M`}
+              {calibrationTextSignal}
             </Text>
           </Container>
         ) : (
           <Container flexDirection="row" gap={6} alignItems="center">
-            <CadButton
-              label="[ DROP 1.2M ]"
-              accent={C_AMBER}
-              onClick={() => {
-                dropTriggerSignal.value += 1;
-              }}
-            />
+            <CadButton label="[ DROP 1.2M ]" accent={C_AMBER} onClick={() => { dropTriggerSignal.value += 1; }} />
             <CadButton
               label={wrench === "UNLATCH_200" ? "[ WRENCH: 200 N·S UNLATCH ]" : "[ WRENCH: 1800 N·S RIP OFF ]"}
               active={wrench === "RIP_1800"}
               accent={C_RED}
-              onClick={() => {
-                wrenchModeSignal.value = wrench === "UNLATCH_200" ? "RIP_1800" : "UNLATCH_200";
-              }}
+              onClick={() => { wrenchModeSignal.value = wrench === "UNLATCH_200" ? "RIP_1800" : "UNLATCH_200"; }}
             />
             {(["TRUCK", "STREET", "SPORT"] as FreqBucket[]).map((fb) => (
               <CadButton key={fb} label={fb} active={freq === fb} onClick={() => { freqBucketSignal.value = fb; }} />
@@ -227,7 +236,7 @@ export function GateHudUikit({ assembly, rootObjRef, onWrapProxy }: GateHudUikit
 
         <Container flexDirection="row" gap={10} alignItems="center">
           <Text fontSize={10} color={C_CYAN}>
-            {`MASS=${telemetryMassKgSignal.value.toFixed(0)}KG  COM=[${telemetryComSignal.value.map((v) => v.toFixed(2)).join(",")}]  F/R=${(telemetryFrontSplitSignal.value * 100).toFixed(0)}/${((1 - telemetryFrontSplitSignal.value) * 100).toFixed(0)}  K=[${telemetryCornerKSignal.value[0].toFixed(0)},${telemetryCornerKSignal.value[1].toFixed(0)}]  ${telemetrySpeedKmhSignal.value.toFixed(0)} KM/H`}
+            {telemetryTextSignal}
           </Text>
         </Container>
       </Container>
