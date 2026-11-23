@@ -1,7 +1,7 @@
 {
-  "name": "@khr3/cars",
+  "name": "@khr3/vehicles",
   "version": "0.1.0",
-  "description": "Catalog, R2 addressing, parametric multi-body car planner, and paper-shell KHR exporter for ecctrl2 + KHR_physics cars.",
+  "description": "Multi-domain vehicle catalog (cars, watercraft, aircraft, spacecraft), R2 addressing, parametric multi-body planner, and paper-shell KHR exporter for ecctrl2 + KHR_physics.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -16,6 +16,10 @@
       "types": "./dist/paper-shell.d.ts",
       "import": "./dist/paper-shell.js"
     },
+    "./fleet": {
+      "types": "./dist/fleet.d.ts",
+      "import": "./dist/fleet.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -25,7 +29,11 @@
   ],
   "keywords": [
     "khr3",
+    "vehicles",
     "cars",
+    "watercraft",
+    "aircraft",
+    "spacecraft",
     "ecctrl",
     "rapier",
     "r3f",
@@ -34,7 +42,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pinkAphant/khr3-cars.git"
+    "url": "git+https://github.com/pinkAphant/khr3-vehicles.git"
   },
   "publishConfig": {
     "access": "public"
@@ -50,23 +58,23 @@
     "test:glb": "node --import ./test-loader.mjs --import tsx --test test/*.test.ts"
   },
   "devDependencies": {
-    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@dimforge/rapier3d-compat": "^0.19.2",
     "@gltf-transform/core": "^4.5.1",
     "@khr3/core": "^0.1.0",
     "@pinkaphant/ecctrl": "^2.0.4-beta.3",
     "@preact/signals-core": "^1.14.5",
-    "@react-three/drei": "^10.7.9",
-    "@react-three/fiber": "^9.8.2",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@react-three/rapier": "^2.2.0",
     "@react-three/uikit": "^1.0.78",
     "@react-three/uikit-lucide": "^1.0.78",
     "@types/node": "^22.0.0",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@types/three": "^0.184.1",
-    "@vitejs/plugin-react": "^6.3.0",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.184.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "three": "^0.184.0",
     "three-mesh-bvh": "^0.9.18",
     "tsx": "^4.23.15",

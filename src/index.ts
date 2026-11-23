@@ -61,3 +61,4 @@ export * from "./massProps.js";
 export * from "./carParts.js";
 export * from "./carKhr.js";
 export * from "./recipes.js";
+export * from "./fleet.js";
