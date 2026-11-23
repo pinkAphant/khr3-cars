@@ -1,7 +1,7 @@
 {
   "name": "@khr3/cars",
-  "version": "0.0.1",
-  "description": "Catalog, R2 addressing and import recipes for ecctrl2 + KHR_physics cars (spec stage).",
+  "version": "0.1.0",
+  "description": "Catalog, R2 addressing, parametric multi-body car planner, and paper-shell KHR exporter for ecctrl2 + KHR_physics cars.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -72,6 +72,5 @@
     "tsx": "^4.23.15",
     "typescript": "^5.8.0",
     "vite": "^8.3.8"
-  },
-  "private": true
+  }
 }
