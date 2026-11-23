@@ -80,7 +80,7 @@ describe("@khr3/cars 4-door and 2-door bodies", () => {
     }
   });
 
-  it("emits KHR specs: one dynamic Chassis, hinged panels with drives and limits", () => {
+  it("emits KHR specs: one dynamic Chassis, hinged panels with drives and limits, plus 4 Wheel_* mounts and tune", () => {
     const plan = planCar(SEDAN_4DOOR);
     const chassis = plan.specs.filter((s) => s.nodeName === "Chassis");
     assert.equal(chassis.length, 1);
@@ -90,5 +90,36 @@ describe("@khr3/cars 4-door and 2-door bodies", () => {
     for (const s of plan.specs.filter((x) => x.joint)) {
       assert.ok(s.joint!.drive.stiffness > 0 && s.joint!.limits[0] < s.joint!.limits[1], s.nodeName);
     }
+    assert.equal(plan.wheels.length, 4);
+    const fl = plan.wheels.find((w) => w.nodeName === "Wheel_FL")!;
+    const rl = plan.wheels.find((w) => w.nodeName === "Wheel_RL")!;
+    near(fl.position[0], 0.78);
+    near(fl.position[1], 0.33);
+    near(fl.position[2], 1.35);
+    near(fl.mountPos[1], 0.47);
+    near(rl.position[2], -1.35);
+    assert.equal(fl.steer, true);
+    assert.equal(fl.drive, false);
+    assert.equal(rl.steer, false);
+    assert.equal(rl.drive, true);
+    assert.equal(plan.tune.rollCenterHeight, 0.25);
+    assert.equal(plan.tune.antiRollStiffness, 2500);
+    assert.deepEqual(plan.sceneExtras, { tune: plan.tune });
+  });
+
+  it("paper-shell builds 27 watertight panels, Jacobi principal inertia, and KHR/OMI/KHR3 binary GLB", async () => {
+    const { buildPaperShellAssembly, PaperShellMassMemo, exportPaperShellKhrGlb, ALL_PANELS_ATTACHED_MASK } = await import("./paper-shell.js");
+    const assembly = buildPaperShellAssembly("coupe_86", "psx-flat");
+    assert.equal(assembly.panels.length, 27);
+    assert.ok(assembly.totalTriangles >= 400 && assembly.totalTriangles <= 900, `tris=${assembly.totalTriangles}`);
+    const memo = new PaperShellMassMemo(assembly);
+    const s0 = memo.evaluate(ALL_PANELS_ATTACHED_MASK, 42);
+    const s0Cached = memo.evaluate(ALL_PANELS_ATTACHED_MASK, 42.1); // within 0.5 kg bucket
+    assert.equal(s0, s0Cached, "memoized within 0.5 kg fuel bucket");
+    const hoodBit = assembly.panels.find((p) => p.partId === "hood")!.bitIndex;
+    const sNoHood = memo.evaluate(ALL_PANELS_ATTACHED_MASK & ~(1 << hoodBit), 42);
+    assert.ok(sNoHood.totalMassKg < s0.totalMassKg);
+    const { glb } = await exportPaperShellKhrGlb(assembly);
+    assert.equal(new DataView(glb.buffer, glb.byteOffset, glb.byteLength).getUint32(0, true), 0x46546c67);
   });
 });

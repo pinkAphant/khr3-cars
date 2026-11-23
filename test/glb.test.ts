@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as THREE from "three";
 import { exportKhrGlb, loadKhrGlb, type KhrExportNodeSpec } from "@khr3/core";
+import { solveWheelLoads } from "@khr3/core/vehicle";
 import { COUPE_2DOOR, SEDAN_4DOOR, planCar, type CarPlan } from "../src/index.js";
 
 function sceneFor(plan: CarPlan): THREE.Group {
@@ -22,9 +23,13 @@ function sceneFor(plan: CarPlan): THREE.Group {
 
 describe("@khr3/cars bodies round-trip through @khr3/core .glb", () => {
   for (const recipe of [SEDAN_4DOOR, COUPE_2DOOR]) {
-    it(`${recipe.id}: exportKhrGlb -> loadKhrGlb keeps mass, doors, limits`, async () => {
+    it(`${recipe.id}: exportKhrGlb -> loadKhrGlb keeps mass, doors, limits, wheels & tune`, async () => {
       const plan = planCar(recipe);
-      const glb = await exportKhrGlb(sceneFor(plan), plan.specs as unknown as KhrExportNodeSpec[]);
+      const glb = await exportKhrGlb(
+        sceneFor(plan),
+        plan.specs as unknown as KhrExportNodeSpec[],
+        plan.sceneExtras as unknown as Record<string, unknown>,
+      );
       const bundle = await loadKhrGlb(glb);
       const chassis = bundle.bodies.find((b) => b.nodeName === "Chassis");
       assert.ok(chassis, `bodies: ${bundle.bodies.map((b) => b.nodeName).join(",")}`);
@@ -44,6 +49,20 @@ describe("@khr3/cars bodies round-trip through @khr3/core .glb", () => {
       }
       const doors = hinged.filter((s) => s.nodeName.startsWith("Door_")).map((s) => s.nodeName).sort();
       assert.deepEqual(doors, recipe.doors === 4 ? ["Door_FL", "Door_FR", "Door_RL", "Door_RR"] : ["Door_FL", "Door_FR"]);
+
+      assert.equal(bundle.wheels.length, 4);
+      const solved = solveWheelLoads(bundle.wheels, bundle.totalDynamicMass, bundle.centerOfMass);
+      assert.equal(solved.length, 4);
+      const sumCornerMass = solved.reduce((acc, w) => acc + w.cornerMassKg, 0);
+      assert.ok(Math.abs(sumCornerMass - bundle.totalDynamicMass) < 1e-3);
+      for (const sw of solved) {
+        const pw = plan.wheels.find((w) => w.nodeName === sw.tag.nodeName)!;
+        assert.ok(Math.abs(sw.mountPos[1] - pw.mountPos[1]) < 1e-5, `${sw.tag.nodeName} mountY ${sw.mountPos[1]} !== ${pw.mountPos[1]}`);
+        assert.ok(sw.springK > 0 && sw.dampingC > 0);
+      }
+      assert.equal(bundle.tune?.engineHorsepower, plan.tune.engineHorsepower);
+      assert.equal(bundle.tune?.rollCenterHeight, plan.tune.rollCenterHeight);
+      assert.equal(bundle.tune?.antiRollStiffness, plan.tune.antiRollStiffness);
     });
   }
 });

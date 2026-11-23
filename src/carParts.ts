@@ -5,6 +5,7 @@
 import type { MassBox, Vec3 } from "./massProps.js";
 
 export type PartKind = "tub" | "roof" | "pillar" | "quarter" | "door" | "hood" | "trunk" | "engine" | "gearbox" | "seat" | "tank";
+export type DriveLayout = "rwd" | "fwd" | "awd";
 
 export interface Hinge {
   /** Hinge point in the car frame. The part node origin sits here. */
@@ -32,9 +33,46 @@ export interface CarDims {
 
 /** Authored per-part masses in kg. Every field is required. */
 export interface CarMasses {
-  tub: number; roof: number; pillarB: number; quarter: number;
-  doorFront: number; doorRear: number; hood: number; trunk: number;
-  engine: number; gearbox: number; seatFront: number; seatRear: number; tank: number;
+  readonly tub: number; readonly roof: number; readonly pillarB: number; readonly quarter: number;
+  readonly doorFront: number; readonly doorRear: number; readonly hood: number; readonly trunk: number;
+  readonly engine: number; readonly gearbox: number; readonly seatFront: number; readonly seatRear: number; readonly tank: number;
+}
+
+/** Zero-dep structural match for `@khr3/core` `EcctrlWheelTag` extras (`extras.ecctrlWheel`). */
+export interface WheelSpec {
+  readonly radius: number;
+  readonly width: number;
+  readonly travel: number;
+  readonly sag: number;
+  readonly driveLayout?: DriveLayout;
+  readonly springK?: number;
+  readonly dampingC?: number;
+  readonly maxBrakeTorque?: number;
+  readonly rollingResistanceCoef?: number;
+  readonly wheelDensity?: number;
+  readonly tireGripFactor?: number;
+  readonly latFrictionEllipseScale?: number;
+  readonly relaxLngRate?: number;
+  readonly relaxLatRate?: number;
+}
+
+/** Zero-dep structural match for `@khr3/core` `KhrCarConfig` (`scene.extras.tune`). */
+export interface CarTune {
+  readonly controlMode?: "VELOCITY" | "POSITION";
+  readonly engineHorsepower?: number;
+  readonly engineMaxRPM?: number;
+  readonly gearRatios?: readonly number[];
+  readonly finalDriveRatio?: number;
+  readonly transmissionMode?: "auto" | "manual";
+  readonly shiftUpRPM?: number;
+  readonly shiftDownRPM?: number;
+  readonly shiftCooldown?: number;
+  readonly steerRate?: number;
+  readonly maxSteerAngle?: number;
+  readonly reverseTorqueScale?: number;
+  readonly reverseRPMScale?: number;
+  readonly rollCenterHeight?: number;
+  readonly antiRollStiffness?: number;
 }
 
 export interface CarRecipe {
@@ -42,7 +80,32 @@ export interface CarRecipe {
   readonly doors: 2 | 4;
   readonly dims: CarDims;
   readonly masses: CarMasses;
+  readonly wheels?: WheelSpec;
+  readonly tune?: CarTune;
 }
+
+export const DEFAULT_WHEEL_SPEC: WheelSpec = Object.freeze({
+  radius: 0.33,
+  width: 0.22,
+  travel: 0.22,
+  sag: 0.08,
+  driveLayout: "rwd",
+  maxBrakeTorque: 1800,
+  tireGripFactor: 1.5,
+});
+
+export const DEFAULT_CAR_TUNE: CarTune = Object.freeze({
+  engineHorsepower: 195,
+  engineMaxRPM: 6500,
+  gearRatios: Object.freeze([3.6, 2.19, 1.41, 1.0, 0.83]),
+  finalDriveRatio: 3.9,
+  transmissionMode: "auto",
+  shiftUpRPM: 5800,
+  shiftDownRPM: 2400,
+  shiftCooldown: 0.3,
+  rollCenterHeight: 0.25,
+  antiRollStiffness: 2500,
+});
 
 const DOOR_T = 0.12;
 const PILLAR_W = 0.12;
@@ -57,14 +120,19 @@ function assertDims(d: CarDims): void {
   if (d.wheelbase + d.frontOverhang >= d.length) throw new RangeError("carParts: wheelbase + frontOverhang must be shorter than length");
 }
 
+/** Front/rear axle positions along Z (car frame). */
+export function axleZ(d: CarDims): { front: number; rear: number } {
+  const front = d.length / 2 - d.frontOverhang;
+  return { front, rear: front - d.wheelbase };
+}
+
 /** Every part of the car in the car frame. Door names use L/R as seen from the driver seat. */
 export function buildCarParts(r: CarRecipe): CarPart[] {
   const d = r.dims;
   const m = r.masses;
   assertDims(d);
   const zFront = d.length / 2;
-  const zFrontAxle = zFront - d.frontOverhang;
-  const zRearAxle = zFrontAxle - d.wheelbase;
+  const { front: zFrontAxle, rear: zRearAxle } = axleZ(d);
   const zA = zFrontAxle - 0.35; // A-pillar base: the front edge of the cabin
   const zC = zRearAxle + 0.25; // C-pillar: the rear edge of the cabin
   const sill = d.groundClearance + 0.2;
@@ -82,7 +150,6 @@ export function buildCarParts(r: CarRecipe): CarPart[] {
     box("Tank", "tank", m.tank, [0, 0.35, zRearAxle + 0.15], [0.7, 0.25, 0.4]),
   ];
   const door = (name: string, side: 1 | -1, zFrontEdge: number, zRearEdge: number, mass: number) => {
-    // Hinged at its front edge; opening swings the rear edge outward (+X on the left, -X on the right).
     const len = zFrontEdge - zRearEdge;
     const limits: [number, number] = side > 0 ? [-DOOR_OPEN, 0] : [0, DOOR_OPEN];
     parts.push(box(name, "door", mass, [side * xDoor, doorY, zFrontEdge - len / 2], [DOOR_T, doorH, len], {
@@ -92,7 +159,6 @@ export function buildCarParts(r: CarRecipe): CarPart[] {
   const pillar = (side: 1 | -1, z: number) =>
     parts.push(box(side > 0 ? "Pillar_B_L" : "Pillar_B_R", "pillar", m.pillarB, [side * xDoor, doorY, z], [DOOR_T, doorH, PILLAR_W]));
   if (r.doors === 4) {
-    // The B-pillar separates the front and rear cabin; rear doors hinge on its rear face.
     const zB = (zA + zC) / 2;
     for (const s of [1, -1] as const) {
       pillar(s, zB);
@@ -111,18 +177,12 @@ export function buildCarParts(r: CarRecipe): CarPart[] {
   }
   const hoodLen = zFront - zA;
   parts.push(box("Hood", "hood", m.hood, [0, 0.95, zA + hoodLen / 2], [d.width - 0.1, SKIN, hoodLen], {
-    anchor: [0, 0.95, zA], axis: [1, 0, 0], limits: [-1.1, 0], // front edge lifts
+    anchor: [0, 0.95, zA], axis: [1, 0, 0], limits: [-1.1, 0],
   }));
   const zRear = -d.length / 2;
   const trunkLen = zC - zRear;
   parts.push(box("Trunk", "trunk", m.trunk, [0, 0.95, zC - trunkLen / 2], [d.width - 0.1, SKIN, trunkLen], {
-    anchor: [0, 0.95, zC], axis: [1, 0, 0], limits: [0, 1.2], // rear edge lifts
+    anchor: [0, 0.95, zC], axis: [1, 0, 0], limits: [0, 1.2],
   }));
   return parts;
-}
-
-/** Front/rear axle positions along Z (car frame). */
-export function axleZ(d: CarDims): { front: number; rear: number } {
-  const front = d.length / 2 - d.frontOverhang;
-  return { front, rear: front - d.wheelbase };
 }
